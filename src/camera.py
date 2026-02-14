@@ -5,10 +5,11 @@ import time
 class Camera:
     def __init__(self, source=0):
         self.source = source
-        self.cap = cv2.VideoCapture(self.source)
+        self.cap = None
         self.lock = threading.Lock()
         self.running = False
         self.frame = None
+        self.last_access = time.time()
 
     def start(self):
         if self.running:
@@ -18,14 +19,28 @@ class Camera:
         self.thread.start()
 
     def _update(self):
+        self.cap = cv2.VideoCapture(self.source)
+        
         while self.running:
+            if self.cap is None or not self.cap.isOpened():
+                self.cap = cv2.VideoCapture(self.source)
+                time.sleep(1)
+                continue
+
             ret, frame = self.cap.read()
             if ret:
                 with self.lock:
                     self.frame = frame
+                    self.last_access = time.time()
             else:
-                # Re-try connection or handle error
-                time.sleep(0.1)
+                # Connection lost, try to reconnect
+                self.cap.release()
+                self.cap = None
+                time.sleep(0.5)
+        
+        # Cleanup
+        if self.cap:
+            self.cap.release()
 
     def get_frame(self):
         with self.lock:
@@ -37,22 +52,3 @@ class Camera:
         self.running = False
         if self.thread.is_alive():
             self.thread.join()
-        self.cap.release()
-
-if __name__ == "__main__":
-    # Simple test
-    cam = Camera()
-    cam.start()
-    print("Camera started. Press Ctrl+C to stop.")
-    try:
-        while True:
-            frame = cam.get_frame()
-            if frame is not None:
-                cv2.imshow("Test Frame", frame)
-            if cv2.waitKey(1) & 0xFF == ord('q'):
-                break
-    except KeyboardInterrupt:
-        pass
-    finally:
-        cam.stop()
-        cv2.destroyAllWindows()

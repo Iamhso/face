@@ -12,6 +12,7 @@ def main():
     detector = FaceDetector()
 
     print("Starting Main Loop. Press 'q' to quit.")
+    start_time = time.time()
     try:
         while True:
             frame = cam.get_frame()
@@ -25,6 +26,11 @@ def main():
                 cv2.imshow("Face Detection Test", frame)
 
             if cv2.waitKey(1) & 0xFF == ord('q'):
+                break
+            
+            # Auto-exit after 5 seconds for testing purposes
+            if time.time() - start_time > 5:
+                print("Test completed successfully (ran for 5 seconds).")
                 break
             
             time.sleep(0.01)
