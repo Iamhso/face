@@ -2,10 +2,13 @@ import os
 import pickle
 import numpy as np
 
+import threading
+
 class FaceManager:
     def __init__(self, storage_file="data/faces.pkl"):
         self.storage_file = storage_file
         self.faces = {} # Name -> [Embedding1, Embedding2, ...]
+        self.lock = threading.Lock()
         self._load_faces()
 
     def _load_faces(self):
@@ -32,16 +35,18 @@ class FaceManager:
             print(f"Error saving faces: {e}")
 
     def add_face(self, name, embedding):
-        if name not in self.faces:
-            self.faces[name] = []
-        self.faces[name].append(embedding)
-        self.save_faces()
+        with self.lock:
+            if name not in self.faces:
+                self.faces[name] = []
+            self.faces[name].append(embedding)
+            self.save_faces()
 
     def delete_face(self, name):
-        if name in self.faces:
-            del self.faces[name]
-            self.save_faces()
-            return True
+        with self.lock:
+            if name in self.faces:
+                del self.faces[name]
+                self.save_faces()
+                return True
         return False
 
     def match_face(self, embedding, threshold=0.8):
@@ -49,12 +54,16 @@ class FaceManager:
         Finds the closest matching face.
         :param embedding: The embedding to match.
         :param threshold: Distance threshold (smaller is closer).
-        :return: Name of the match or "Unknown".
+        :return: Name of the match or "Unknown", best_dist.
         """
         best_name = "Unknown"
         best_dist = float('inf')
 
-        for name, embeddings in self.faces.items():
+        # Use a copy of keys to avoid RuntimeError if changed during iteration
+        with self.lock:
+            items = list(self.faces.items())
+
+        for name, embeddings in items:
             for known_emb in embeddings:
                 dist = np.linalg.norm(embedding - known_emb)
                 if dist < best_dist:
